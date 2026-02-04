@@ -5,3 +5,11 @@
 
 # db
 *.db
+
+# process IDs
+*.pid
+*.pid.*
+
+# debug/test scripts
+backend/debug_*.py
+backend/test_*.py
