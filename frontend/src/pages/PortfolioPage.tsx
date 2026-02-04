@@ -29,6 +29,7 @@ const PortfolioPage: React.FC = () => {
     loading,
     fetchPortfolios,
     createPortfolio,
+    updatePortfolio,
     selectPortfolio,
     deletePortfolio,
     addItem,
@@ -39,8 +40,10 @@ const PortfolioPage: React.FC = () => {
   const { funds, fetchFunds } = useFundStore();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [createForm] = Form.useForm();
+  const [editForm] = Form.useForm();
   const [addItemForm] = Form.useForm();
 
   useEffect(() => {
@@ -105,33 +108,61 @@ const PortfolioPage: React.FC = () => {
     }
   };
 
+  const handleEditPortfolio = (portfolio: any) => {
+    editForm.setFieldsValue({
+      id: portfolio.id,
+      name: portfolio.name,
+      description: portfolio.description || '',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdatePortfolio = async (values: any) => {
+    try {
+      await updatePortfolio(values.id, {
+        name: values.name,
+        description: values.description,
+      });
+      message.success('更新成功');
+      setIsEditModalOpen(false);
+      editForm.resetFields();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '更新失败');
+    }
+  };
+
   const columns = [
     {
       title: '基金代码',
       dataIndex: ['fund', 'code'],
       key: 'code',
+      sorter: (a: any, b: any) => a.fund.code.localeCompare(b.fund.code),
     },
     {
       title: '基金名称',
       dataIndex: ['fund', 'name'],
       key: 'name',
+      sorter: (a: any, b: any) => a.fund.name.localeCompare(b.fund.name),
     },
     {
       title: '持有份额',
       dataIndex: 'shares',
       key: 'shares',
+      sorter: (a: any, b: any) => a.shares - b.shares,
       render: (shares: number) => shares.toFixed(2),
     },
     {
       title: '成本价',
       dataIndex: 'cost_basis',
       key: 'cost_basis',
+      sorter: (a: any, b: any) => a.cost_basis - b.cost_basis,
       render: (cost: number) => `¥${cost.toFixed(4)}`,
     },
     {
       title: '购买日期',
       dataIndex: 'purchase_date',
       key: 'purchase_date',
+      sorter: (a: any, b: any) => dayjs(a.purchase_date).unix() - dayjs(b.purchase_date).unix(),
       render: (date: string) => dayjs(date).format('YYYY-MM-DD'),
     },
     {
@@ -157,46 +188,54 @@ const PortfolioPage: React.FC = () => {
       title: '基金代码',
       dataIndex: 'fund_code',
       key: 'fund_code',
+      sorter: (a: any, b: any) => a.fund_code.localeCompare(b.fund_code),
     },
     {
       title: '基金名称',
       dataIndex: 'fund_name',
       key: 'fund_name',
+      sorter: (a: any, b: any) => a.fund_name.localeCompare(b.fund_name),
     },
     {
       title: '持有份额',
       dataIndex: 'shares',
       key: 'shares',
+      sorter: (a: any, b: any) => a.shares - b.shares,
       render: (shares: number) => shares.toFixed(2),
     },
     {
       title: '成本价',
       dataIndex: 'cost_basis',
       key: 'cost_basis',
+      sorter: (a: any, b: any) => a.cost_basis - b.cost_basis,
       render: (cost: number) => `¥${cost.toFixed(4)}`,
     },
     {
       title: '当前净值',
       dataIndex: 'current_nav',
       key: 'current_nav',
+      sorter: (a: any, b: any) => a.current_nav - b.current_nav,
       render: (nav: number) => `¥${nav.toFixed(4)}`,
     },
     {
       title: '持仓成本',
       dataIndex: 'cost',
       key: 'cost',
+      sorter: (a: any, b: any) => a.cost - b.cost,
       render: (cost: number) => `¥${cost.toFixed(2)}`,
     },
     {
       title: '持仓市值',
       dataIndex: 'value',
       key: 'value',
+      sorter: (a: any, b: any) => a.value - b.value,
       render: (value: number) => `¥${value.toFixed(2)}`,
     },
     {
       title: '收益',
       dataIndex: 'return',
       key: 'return',
+      sorter: (a: any, b: any) => a.return - b.return,
       render: (ret: number) => {
         const color = ret > 0 ? '#cf1322' : ret < 0 ? '#3f8600' : '#000';
         return <span style={{ color }}>{ret > 0 ? '+' : ''}¥{ret.toFixed(2)}</span>;
@@ -206,6 +245,7 @@ const PortfolioPage: React.FC = () => {
       title: '收益率',
       dataIndex: 'return_percent',
       key: 'return_percent',
+      sorter: (a: any, b: any) => a.return_percent - b.return_percent,
       render: (percent: number) => {
         const color = percent > 0 ? '#cf1322' : percent < 0 ? '#3f8600' : '#000';
         return <span style={{ color }}>{percent > 0 ? '+' : ''}{percent.toFixed(2)}%</span>;
@@ -241,23 +281,34 @@ const PortfolioPage: React.FC = () => {
                     }}
                     onClick={() => handleSelectPortfolio(portfolio.id)}
                     extra={
-                      <Popconfirm
-                        title="确定删除这个组合吗？"
-                        onConfirm={(e) => {
-                          e?.stopPropagation();
-                          handleDeletePortfolio(portfolio.id);
-                        }}
-                        okText="确定"
-                        cancelText="取消"
-                      >
+                      <div>
                         <Button
                           type="text"
-                          danger
                           size="small"
-                          icon={<DeleteOutlined />}
-                          onClick={(e) => e.stopPropagation()}
+                          icon={<EditOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditPortfolio(portfolio);
+                          }}
                         />
-                      </Popconfirm>
+                        <Popconfirm
+                          title="确定删除这个组合吗？"
+                          onConfirm={(e) => {
+                            e?.stopPropagation();
+                            handleDeletePortfolio(portfolio.id);
+                          }}
+                          okText="确定"
+                          cancelText="取消"
+                        >
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </Popconfirm>
+                      </div>
                     }
                   >
                     <div style={{ fontWeight: 'bold' }}>{portfolio.name}</div>
@@ -468,6 +519,41 @@ const PortfolioPage: React.FC = () => {
           <Form.Item>
             <Button type="primary" htmlType="submit" block loading={loading}>
               添加
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Edit Portfolio Modal */}
+      <Modal
+        title="编辑投资组合"
+        open={isEditModalOpen}
+        onCancel={() => {
+          setIsEditModalOpen(false);
+          editForm.resetFields();
+        }}
+        footer={null}
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleUpdatePortfolio}>
+          <Form.Item name="id" hidden>
+            <Input />
+          </Form.Item>
+
+          <Form.Item
+            label="组合名称"
+            name="name"
+            rules={[{ required: true, message: '请输入组合名称' }]}
+          >
+            <Input placeholder="例如：稳健型组合" />
+          </Form.Item>
+
+          <Form.Item label="组合描述" name="description">
+            <Input.TextArea rows={3} placeholder="可选，描述这个组合的投资策略" />
+          </Form.Item>
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>
+              更新
             </Button>
           </Form.Item>
         </Form>

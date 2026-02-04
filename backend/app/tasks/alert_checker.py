@@ -28,7 +28,7 @@ async def check_alerts():
                         continue
 
                     # Get current NAV
-                    nav_data = await nav_estimator.get_estimated_nav(fund.code)
+                    nav_data = await nav_estimator.get_estimated_nav(fund.code, db_session=db)
                     if not nav_data:
                         continue
 

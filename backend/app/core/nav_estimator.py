@@ -27,6 +27,76 @@ class NavEstimator:
 
         return trading_start <= current_time <= trading_end
 
+    def is_etf_linked_fund(self, fund_name: str) -> bool:
+        """Check if a fund is an ETF-linked fund based on its name."""
+        return "联接" in fund_name
+
+    async def is_today_nav_published(self, fund_code: str, db_session=None) -> bool:
+        """Check if today's actual NAV has been published."""
+        if not db_session:
+            return False
+        try:
+            from app.models.fund import Fund as FundModel, NavHistory as NavHistoryModel
+            fund_query = select(FundModel).where(FundModel.code == fund_code)
+            fund_result = await db_session.execute(fund_query)
+            fund = fund_result.scalar_one_or_none()
+            if not fund:
+                return False
+            nav_query = (
+                select(NavHistoryModel)
+                .where(NavHistoryModel.fund_id == fund.id)
+                .order_by(NavHistoryModel.date.desc())
+                .limit(1)
+            )
+            nav_result = await db_session.execute(nav_query)
+            nav_history = nav_result.scalar_one_or_none()
+            return nav_history.date == date.today() if nav_history else False
+        except Exception as e:
+            print(f"Error checking today's NAV: {e}")
+            return False
+
+    async def _get_actual_nav(self, fund_code: str, db_session=None) -> float | None:
+        """Get the latest actual NAV value.
+        
+        Priority: Database (today's NAV if exists) > Tiantian API (current_nav).
+        
+        Returns:
+            Latest actual NAV value
+        """
+        if not db_session:
+            return None
+        try:
+            from app.models.fund import Fund as FundModel, NavHistory as NavHistoryModel
+            
+            # 1. Try to get today's NAV from database first
+            fund_query = select(FundModel).where(FundModel.code == fund_code)
+            fund_result = await db_session.execute(fund_query)
+            fund = fund_result.scalar_one_or_none()
+            
+            if fund:
+                nav_query = (
+                    select(NavHistoryModel)
+                    .where(NavHistoryModel.fund_id == fund.id)
+                    .where(NavHistoryModel.date == date.today())
+                    .order_by(NavHistoryModel.date.desc())
+                    .limit(1)
+                )
+                nav_result = await db_session.execute(nav_query)
+                today_nav = nav_result.scalar_one_or_none()
+                
+                if today_nav:
+                    return today_nav.nav
+            
+            # 2. Fallback to Tiantian API current_nav
+            realtime_data = await data_fetcher.get_realtime_nav(fund_code)
+            if realtime_data and realtime_data.get("current_nav"):
+                return realtime_data["current_nav"]
+            
+            return None
+        except Exception as e:
+            print(f"Error getting actual NAV: {e}")
+            return None
+
     async def get_estimated_nav(self, fund_code: str, db_session=None) -> dict[str, Any] | None:
         """Get estimated NAV based on actual holdings and real-time stock prices."""
         # Check cache first
@@ -35,17 +105,26 @@ class NavEstimator:
         if cached:
             return cached
 
+        # Get fund name for type checking
+        fund_name = await self._get_fund_name(fund_code, db_session)
+
+        # Check if this is an ETF-linked fund
+        if self.is_etf_linked_fund(fund_name):
+            # ETF-linked funds: use Tiantian API directly
+            return await self._get_tiantian_estimate(fund_code, db_session)
+
+        # Normal funds: prioritize holdings-based calculation
         # Get previous day's NAV
         previous_nav = await self._get_previous_nav(fund_code, db_session)
         if not previous_nav:
             # Fallback to Tiantian Fund API if no historical data
-            return await self._get_tiantian_estimate(fund_code)
+            return await self._get_tiantian_estimate(fund_code, db_session)
 
         # Get fund holdings
         holdings = await data_fetcher.get_fund_holdings(fund_code)
         if not holdings:
             # Fallback to Tiantian Fund API if no holdings data
-            return await self._get_tiantian_estimate(fund_code)
+            return await self._get_tiantian_estimate(fund_code, db_session)
 
         # Get asset allocation
         allocation = await data_fetcher.get_fund_asset_allocation(fund_code)
@@ -148,7 +227,7 @@ class NavEstimator:
             print(f"Error getting fund name: {e}")
             return fund_code
 
-    async def _get_tiantian_estimate(self, fund_code: str) -> dict[str, Any] | None:
+    async def _get_tiantian_estimate(self, fund_code: str, db_session=None) -> dict[str, Any] | None:
         """Fallback to Tiantian Fund API estimate."""
         try:
             # Fetch real-time data
@@ -156,16 +235,22 @@ class NavEstimator:
             if not realtime_data:
                 return None
 
+            # Get latest actual NAV (prioritize database over API)
+            actual_nav = await self._get_actual_nav(fund_code, db_session) or realtime_data.get("current_nav")
+            
             # Calculate estimation
             is_trading = self.is_trading_hours()
-            current_nav = realtime_data["current_nav"]
-            estimated_nav = realtime_data["estimated_nav"] if is_trading else current_nav
-            change_percent = realtime_data["estimated_growth"] if is_trading else 0.0
+            today_published = await self.is_today_nav_published(fund_code, db_session)
+            
+            # Show estimated value if today's actual NAV is not published yet (regardless of trading hours)
+            should_show_estimate = not today_published
+            estimated_nav = realtime_data["estimated_nav"] if should_show_estimate else actual_nav
+            change_percent = realtime_data["estimated_growth"] if should_show_estimate else 0.0
 
             result = {
                 "fund_code": fund_code,
                 "fund_name": realtime_data["fund_name"],
-                "current_nav": current_nav,
+                "current_nav": actual_nav,
                 "estimated_nav": estimated_nav,
                 "change_percent": change_percent,
                 "last_update": datetime.now(),

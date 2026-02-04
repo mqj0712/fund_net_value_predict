@@ -5,6 +5,12 @@ from datetime import datetime
 from typing import Dict, Set
 from fastapi import WebSocket, WebSocketDisconnect
 
+from app.db.session import AsyncSessionLocal
+from app.core.nav_estimator import nav_estimator
+from app.schemas.fund import WSMessage
+from typing import Dict, Set
+from fastapi import WebSocket, WebSocketDisconnect
+
 from app.core.nav_estimator import nav_estimator
 from app.schemas.fund import WSMessage
 
@@ -62,7 +68,8 @@ async def realtime_nav_handler(websocket: WebSocket, fund_code: str):
 
     try:
         # Send initial data
-        nav_data = await nav_estimator.get_estimated_nav(fund_code)
+        async with AsyncSessionLocal() as db:
+            nav_data = await nav_estimator.get_estimated_nav(fund_code, db_session=db)
         if nav_data:
             message = WSMessage(
                 type="nav_update",
@@ -83,7 +90,8 @@ async def realtime_nav_handler(websocket: WebSocket, fund_code: str):
 
             except asyncio.TimeoutError:
                 # Send periodic update
-                nav_data = await nav_estimator.get_estimated_nav(fund_code)
+                async with AsyncSessionLocal() as db:
+                    nav_data = await nav_estimator.get_estimated_nav(fund_code, db_session=db)
                 if nav_data:
                     message = WSMessage(
                         type="nav_update",

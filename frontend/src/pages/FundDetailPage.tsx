@@ -4,6 +4,7 @@ import { Card, Descriptions, Statistic, Row, Col, Button, Spin, message } from '
 import { ArrowLeftOutlined, ReloadOutlined } from '@ant-design/icons';
 import { fundsApi } from '../api/funds';
 import NavChart from '../components/fund/NavChart';
+import NavHistoryTable from '../components/fund/NavHistoryTable';
 import type { Fund, RealtimeNav } from '../types';
 import { createRealtimeNavWebSocket } from '../api/websocket';
 
@@ -157,8 +158,16 @@ const FundDetailPage: React.FC = () => {
       </Card>
 
       {/* NAV Chart Card */}
-      <Card title="历史净值走势">
+      <Card title="历史净值走势" style={{ marginBottom: '24px' }}>
         <NavChart fundCode={fund.code} height={500} />
+      </Card>
+
+      {/* NAV History Table Card */}
+      <Card
+        title="历史净值明细"
+        extra={<span style={{ fontSize: '12px', color: '#8c8c8c' }}>显示最近净值记录</span>}
+      >
+        <NavHistoryTable fundCode={fund.code} />
       </Card>
     </div>
   );

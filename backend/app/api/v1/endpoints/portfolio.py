@@ -238,7 +238,7 @@ async def get_portfolio_performance(portfolio_id: int, db: AsyncSession = Depend
 
     for item in portfolio.items:
         # Get current NAV
-        estimated_nav = await nav_estimator.get_estimated_nav(item.fund.code)
+        estimated_nav = await nav_estimator.get_estimated_nav(item.fund.code, db_session=db)
         current_nav = estimated_nav["estimated_nav"] if estimated_nav else item.cost_basis
 
         item_cost = item.shares * item.cost_basis

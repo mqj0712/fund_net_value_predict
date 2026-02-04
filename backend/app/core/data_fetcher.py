@@ -6,6 +6,7 @@ import httpx
 from typing import Any
 
 import efinance as ef
+import pandas as pd
 
 
 class DataFetcher:
@@ -65,7 +66,7 @@ class DataFetcher:
                         "date": datetime.strptime(row['日期'], '%Y-%m-%d').date(),
                         "nav": float(row['单位净值']),
                         "accumulated_nav": float(row['累计净值']) if '累计净值' in row else None,
-                        "daily_growth": float(row['日增长率'].rstrip('%')) if '日增长率' in row and row['日增长率'] else None,
+                        "daily_growth": float(row['涨跌幅']) if '涨跌幅' in row and pd.notna(row['涨跌幅']) else None,
                     })
                 except (ValueError, KeyError) as e:
                     print(f"Error parsing row: {e}")

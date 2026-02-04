@@ -1,4 +1,4 @@
-"""TypeScript types for the application."""
+// TypeScript types for the application.
 export interface Fund {
   id: number;
   code: string;
