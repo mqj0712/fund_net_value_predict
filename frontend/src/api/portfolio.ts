@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Portfolio, PortfolioDetail, PortfolioItem, PortfolioPerformance } from '../types';
+import type { Portfolio, PortfolioDetail, PortfolioItem, PortfolioPerformance, PortfolioTransaction } from '../types';
 
 export const portfolioApi = {
   // List all portfolios
@@ -76,6 +76,27 @@ export const portfolioApi = {
   // Get portfolio performance
   getPerformance: async (id: number): Promise<PortfolioPerformance> => {
     const response = await apiClient.get(`/api/v1/portfolio/${id}/performance`);
+    return response.data;
+  },
+
+  // Execute transaction (buy/sell)
+  executeTransaction: async (
+    portfolioId: number,
+    data: {
+      fund_id: number;
+      transaction_type: 'buy' | 'sell' | 'adjust';
+      shares: number;  // Positive for buy, negative for sell
+      price: number;
+      notes?: string;
+    }
+  ): Promise<PortfolioTransaction> => {
+    const response = await apiClient.post(`/api/v1/portfolio/${portfolioId}/transactions`, data);
+    return response.data;
+  },
+
+  // Get transaction history
+  getTransactions: async (portfolioId: number): Promise<PortfolioTransaction[]> => {
+    const response = await apiClient.get(`/api/v1/portfolio/${portfolioId}/transactions`);
     return response.data;
   },
 };

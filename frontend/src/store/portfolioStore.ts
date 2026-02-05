@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import type { Portfolio, PortfolioDetail, PortfolioPerformance } from '../types';
+import type { Portfolio, PortfolioDetail, PortfolioPerformance, PortfolioTransaction } from '../types';
 import { portfolioApi } from '../api/portfolio';
 
 interface PortfolioState {
   portfolios: Portfolio[];
   selectedPortfolio: PortfolioDetail | null;
   performance: PortfolioPerformance | null;
+  transactions: PortfolioTransaction[];
   loading: boolean;
   error: string | null;
 
@@ -19,6 +20,8 @@ interface PortfolioState {
   updateItem: (portfolioId: number, itemId: number, data: any) => Promise<void>;
   deleteItem: (portfolioId: number, itemId: number) => Promise<void>;
   fetchPerformance: (id: number) => Promise<void>;
+  executeTransaction: (portfolioId: number, data: any) => Promise<void>;
+  fetchTransactions: (portfolioId: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -26,6 +29,7 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
   portfolios: [],
   selectedPortfolio: null,
   performance: null,
+  transactions: [],
   loading: false,
   error: null,
 
@@ -136,6 +140,36 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
     try {
       const performance = await portfolioApi.getPerformance(id);
       set({ performance, loading: false });
+    } catch (error: any) {
+      set({ error: error.message, loading: false });
+    }
+  },
+
+  executeTransaction: async (portfolioId, data) => {
+    set({ loading: true, error: null });
+    try {
+      await portfolioApi.executeTransaction(portfolioId, data);
+      // Refresh portfolio details and performance
+      const portfolio = await portfolioApi.getPortfolio(portfolioId);
+      const performance = await portfolioApi.getPerformance(portfolioId);
+      const transactions = await portfolioApi.getTransactions(portfolioId);
+      set({
+        selectedPortfolio: portfolio,
+        performance,
+        transactions,
+        loading: false,
+      });
+    } catch (error: any) {
+      set({ error: error.message, loading: false });
+      throw error;
+    }
+  },
+
+  fetchTransactions: async (portfolioId: number) => {
+    set({ loading: true, error: null });
+    try {
+      const transactions = await portfolioApi.getTransactions(portfolioId);
+      set({ transactions, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
     }

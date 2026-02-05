@@ -53,6 +53,19 @@ export interface PortfolioDetail extends Portfolio {
   items: PortfolioItem[];
 }
 
+export interface PortfolioTransaction {
+  id: number;
+  portfolio_id: number;
+  fund_id: number;
+  transaction_type: 'buy' | 'sell' | 'adjust';
+  shares: number;
+  price: number;
+  notes?: string;
+  transaction_date: string;
+  created_at: string;
+  fund?: Fund;
+}
+
 export interface PortfolioPerformance {
   portfolio_id: number;
   total_cost: number;

@@ -4,12 +4,23 @@ A full-stack application for tracking and displaying real-time estimated net ass
 
 ## Features
 
+### Core Features
 - **Real-time NAV Estimation**: Live updates of fund NAV during trading hours via WebSocket
 - **Fund Tracking**: Add and track multiple Chinese mutual funds
 - **Historical Charts**: View historical NAV data with interactive charts
 - **Portfolio Management**: Create portfolios and track multiple fund holdings
+- **Portfolio Adjustment**: Buy, sell, and edit holdings with automatic cost basis calculation
+- **Transaction History**: Complete record of all portfolio transactions
 - **Price Alerts**: Set up alerts for price changes and get real-time notifications
 - **Responsive UI**: Modern interface built with Ant Design
+
+### Portfolio Management Features
+- **Edit Holdings**: Modify shares, cost basis, and purchase date for existing holdings
+- **Buy Operations**: Add to existing holdings with automatic average cost calculation
+- **Sell Operations**: Reduce holdings, supporting partial and full position sales
+- **Transaction Tracking**: Historical record of all buy/sell/adjust operations
+- **Performance Analysis**: Real-time portfolio value, returns, and yield calculations
+- **Holdings Comparison**: Before/after adjustment views with impact analysis
 
 ## Technology Stack
 
@@ -145,8 +156,19 @@ The NAV updates automatically every 30 seconds during trading hours (9:30-15:00 
 - `GET /api/v1/portfolio` - List portfolios
 - `POST /api/v1/portfolio` - Create portfolio
 - `GET /api/v1/portfolio/{id}` - Portfolio details
+- `PUT /api/v1/portfolio/{id}` - Update portfolio
+- `DELETE /api/v1/portfolio/{id}` - Delete portfolio
+
+#### Portfolio Holdings
 - `POST /api/v1/portfolio/{id}/items` - Add fund to portfolio
-- `GET /api/v1/portfolio/{id}/performance` - Portfolio performance
+- `PUT /api/v1/portfolio/{id}/items/{item_id}` - Update holding (shares, cost_basis, purchase_date)
+- `DELETE /api/v1/portfolio/{id}/items/{item_id}` - Remove holding from portfolio
+
+#### Portfolio Transactions (Buy/Sell Operations)
+- `POST /api/v1/portfolio/{id}/transactions` - Execute buy/sell transaction
+  - Body: `{ "fund_id": int, "operation_type": "buy|sell", "shares": float, "price": float }`
+- `GET /api/v1/portfolio/{id}/transactions` - Get transaction history
+- `GET /api/v1/portfolio/{id}/performance` - Portfolio performance and analytics
 
 #### Alerts
 - `GET /api/v1/alerts` - List alerts
@@ -252,16 +274,29 @@ ws.onmessage = (event) => {
 
 ## Future Enhancements
 
+**Portfolios - Enhancement Features:**
+- [ ] Cost price adjustment tool
+- [ ] Holding comparison view
+- [ ] One-click rebalancing with target weights
+- [ ] Performance attribution analysis
+- [ ] Automatic SIP (Systematic Investment Plan)
+- [ ] Rebalancing alerts and suggestions
+- [ ] Live portfolio monitoring with real-time updates
+- [ ] Portfolio export to CSV/Excel
+- [ ] Risk analytics (beta, Sharpe ratio, VaR)
+- [ ] Sector/industry analysis
+
+**General:**
 - [ ] Add historical NAV charts with ECharts
-- [ ] Implement portfolio management UI
-- [ ] Add alert configuration UI
+- [ ] Alert configuration UI
 - [ ] Support for fund comparison
-- [ ] Export portfolio data to Excel
 - [ ] Mobile responsive design improvements
 - [ ] Redis caching for production
 - [ ] PostgreSQL database for production
 - [ ] Docker deployment configuration
 - [ ] User authentication and authorization
+
+**See [TODO.md](./TODO.md) for detailed feature list and roadmap.**
 
 ## Troubleshooting
 

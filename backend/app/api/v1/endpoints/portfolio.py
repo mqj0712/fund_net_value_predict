@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.fund import (
     Portfolio as PortfolioModel,
     PortfolioItem as PortfolioItemModel,
+    PortfolioTransaction as PortfolioTransactionModel,
     Fund as FundModel,
 )
 from app.schemas.fund import (
@@ -19,6 +20,8 @@ from app.schemas.fund import (
     PortfolioItemCreate,
     PortfolioItemUpdate,
     PortfolioPerformance,
+    PortfolioTransaction,
+    PortfolioTransactionCreate,
 )
 from app.core.nav_estimator import nav_estimator
 from app.core.cache_manager import cache, get_cache_key
@@ -277,3 +280,131 @@ async def get_portfolio_performance(portfolio_id: int, db: AsyncSession = Depend
     cache.set(cache_key, performance, settings.cache_portfolio_ttl)
 
     return performance
+
+
+@router.post("/portfolio/{portfolio_id}/transactions", response_model=PortfolioTransaction, status_code=201)
+async def execute_transaction(
+    portfolio_id: int,
+    transaction_data: PortfolioTransactionCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute buy/sell transaction."""
+    # Check if portfolio exists
+    portfolio_query = select(PortfolioModel).where(PortfolioModel.id == portfolio_id)
+    portfolio_result = await db.execute(portfolio_query)
+    portfolio = portfolio_result.scalar_one_or_none()
+
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    # Check if fund exists
+    fund_query = select(FundModel).where(FundModel.id == transaction_data.fund_id)
+    fund_result = await db.execute(fund_query)
+    fund = fund_result.scalar_one_or_none()
+
+    if not fund:
+        raise HTTPException(status_code=404, detail="Fund not found")
+
+    # For sell operation, check if holding exists and has enough shares
+    if transaction_data.transaction_type == "sell":
+        if transaction_data.shares > 0:
+            raise HTTPException(status_code=400, detail="Sell operation requires negative shares")
+
+        item_query = (
+            select(PortfolioItemModel)
+            .where(
+                PortfolioItemModel.portfolio_id == portfolio_id,
+                PortfolioItemModel.fund_id == transaction_data.fund_id,
+            )
+        )
+        item_result = await db.execute(item_query)
+        existing_item = item_result.scalar_one_or_none()
+
+        if not existing_item:
+            raise HTTPException(status_code=400, detail="No holding found for this fund")
+
+        if existing_item.shares + transaction_data.shares < 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient shares. Current: {existing_item.shares}, Trying to sell: {-transaction_data.shares}"
+            )
+
+    # Create transaction record
+    transaction = PortfolioTransactionModel(portfolio_id=portfolio_id, **transaction_data.model_dump())
+    db.add(transaction)
+    await db.commit()
+    await db.refresh(transaction)
+
+    # Update or create portfolio item
+    item_query = (
+        select(PortfolioItemModel)
+        .where(
+            PortfolioItemModel.portfolio_id == portfolio_id,
+            PortfolioItemModel.fund_id == transaction_data.fund_id,
+        )
+    )
+    item_result = await db.execute(item_query)
+    existing_item = item_result.scalar_one_or_none()
+
+    if existing_item:
+        # For buy: average the cost basis
+        # For sell: keep the same cost basis (FIFO not implemented yet)
+        if transaction_data.transaction_type == "buy":
+            total_shares = existing_item.shares + transaction_data.shares
+            total_cost = (existing_item.shares * existing_item.cost_basis) + (
+                transaction_data.shares * transaction_data.price
+            )
+            existing_item.cost_basis = total_cost / total_shares if total_shares > 0 else existing_item.cost_basis
+            existing_item.shares = total_shares
+        else:
+            existing_item.shares += transaction_data.shares  # transaction_data.shares is negative for sell
+
+            # Remove item if shares go to zero
+            if abs(existing_item.shares) < 0.01:
+                await db.delete(existing_item)
+    elif transaction_data.transaction_type == "buy":
+        # Create new holding for buy operation
+        new_item = PortfolioItemModel(
+            portfolio_id=portfolio_id,
+            fund_id=transaction_data.fund_id,
+            shares=transaction_data.shares,
+            cost_basis=transaction_data.price,
+            purchase_date=transaction_data.transaction_date.date(),
+        )
+        db.add(new_item)
+
+    await db.commit()
+
+    # Clear cache
+    cache.delete_pattern(f"portfolio:{portfolio_id}")
+
+    # Load fund relationship for response
+    await db.refresh(transaction, ["fund"])
+
+    return PortfolioTransaction.model_validate(transaction)
+
+
+@router.get("/portfolio/{portfolio_id}/transactions", response_model=list[PortfolioTransaction])
+async def get_portfolio_transactions(
+    portfolio_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get transaction history for a portfolio."""
+    # Check if portfolio exists
+    portfolio_query = select(PortfolioModel).where(PortfolioModel.id == portfolio_id)
+    portfolio_result = await db.execute(portfolio_query)
+    portfolio = portfolio_result.scalar_one_or_none()
+
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    # Get transactions
+    query = (
+        select(PortfolioTransactionModel)
+        .where(PortfolioTransactionModel.portfolio_id == portfolio_id)
+        .order_by(PortfolioTransactionModel.transaction_date.desc())
+    )
+    result = await db.execute(query)
+    transactions = result.scalars().all()
+
+    return [PortfolioTransaction.model_validate(t) for t in transactions]

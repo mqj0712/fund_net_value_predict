@@ -151,6 +151,33 @@ async def delete_fund(code: str, db: AsyncSession = Depends(get_db)):
     return None
 
 
+@router.put("/funds/{code}", response_model=Fund)
+async def update_fund(code: str, fund_data: FundUpdate, db: AsyncSession = Depends(get_db)):
+    """Update fund details (rename, update type, company, etc.)."""
+    query = select(FundModel).where(FundModel.code == code)
+    result = await db.execute(query)
+    fund = result.scalar_one_or_none()
+
+    if not fund:
+        raise HTTPException(status_code=404, detail="Fund not found")
+
+    # Update fields if provided
+    if fund_data.name is not None:
+        fund.name = fund_data.name
+    if fund_data.type is not None:
+        fund.type = fund_data.type
+    if fund_data.company is not None:
+        fund.company = fund_data.company
+
+    await db.commit()
+    await db.refresh(fund)
+
+    # Clear cache
+    cache.delete_pattern(f"fund:{code}")
+
+    return Fund.model_validate(fund)
+
+
 @router.get("/funds/{code}/nav/history", response_model=list[NavHistory])
 async def get_nav_history(
     code: str,

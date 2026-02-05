@@ -8,7 +8,7 @@ class FundBase(BaseModel):
     """Base fund schema."""
 
     code: str = Field(..., min_length=6, max_length=10)
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str | None = Field(None, min_length=1, max_length=100)
     type: str | None = None
     company: str | None = None
 
@@ -166,6 +166,34 @@ class PortfolioDetail(Portfolio):
     """Portfolio with items."""
 
     items: list[PortfolioItem] = []
+
+
+# Portfolio Transaction Schemas
+class PortfolioTransactionBase(BaseModel):
+    """Base portfolio transaction schema."""
+
+    fund_id: int
+    transaction_type: str = Field(..., pattern="^(buy|sell|adjust)$")
+    shares: float = Field(..., description="Positive for buy, negative for sell")
+    price: float = Field(..., gt=0)
+    notes: str | None = None
+
+
+class PortfolioTransactionCreate(PortfolioTransactionBase):
+    """Portfolio transaction creation schema."""
+
+    pass
+
+
+class PortfolioTransaction(PortfolioTransactionBase):
+    """Portfolio transaction response schema."""
+
+    id: int
+    portfolio_id: int
+    transaction_date: datetime
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class PortfolioPerformance(BaseModel):

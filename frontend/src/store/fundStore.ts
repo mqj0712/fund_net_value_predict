@@ -13,8 +13,9 @@ interface FundState {
   fetchFunds: () => Promise<void>;
   searchFunds: (query: string) => Promise<Fund[]>;
   selectFund: (fund: Fund | null) => void;
-  addFund: (data: { code: string; name: string; type?: string; company?: string }) => Promise<void>;
+  addFund: (data: { code: string; name?: string; type?: string; company?: string }) => Promise<void>;
   deleteFund: (code: string) => Promise<void>;
+  updateFund: (code: string, data: { name?: string; type?: string; company?: string }) => Promise<void>;
   updateRealtimeNav: (fundCode: string, nav: RealtimeNav) => void;
   clearError: () => void;
 }
@@ -70,6 +71,21 @@ export const useFundStore = create<FundState>((set, get) => ({
       await fundsApi.deleteFund(code);
       set((state) => ({
         funds: state.funds.filter((f) => f.code !== code),
+        loading: false,
+      }));
+    } catch (error: any) {
+      set({ error: error.message, loading: false });
+      throw error;
+    }
+  },
+
+  updateFund: async (code: string, data) => {
+    set({ loading: true, error: null });
+    try {
+      const updatedFund = await fundsApi.updateFund(code, data);
+      set((state) => ({
+        funds: state.funds.map((f) => (f.code === code ? updatedFund : f)),
+        selectedFund: state.selectedFund?.code === code ? updatedFund : state.selectedFund,
         loading: false,
       }));
     } catch (error: any) {

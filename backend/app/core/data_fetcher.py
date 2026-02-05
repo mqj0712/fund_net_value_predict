@@ -24,12 +24,10 @@ class DataFetcher:
     async def get_fund_info(self, fund_code: str) -> dict[str, Any] | None:
         """Get fund basic information using efinance."""
         try:
-            # Use efinance to get fund info
             fund_info = ef.fund.get_base_info(fund_code)
             if fund_info is None or fund_info.empty:
                 return None
 
-            # Convert to dict
             info = fund_info.to_dict('records')[0] if not fund_info.empty else {}
 
             return {
@@ -40,6 +38,33 @@ class DataFetcher:
             }
         except Exception as e:
             print(f"Error fetching fund info for {fund_code}: {e}")
+            return await self._get_fund_info_from_tiantian(fund_code)
+
+    async def _get_fund_info_from_tiantian(self, fund_code: str) -> dict[str, Any] | None:
+        """Fallback: get basic fund info from Tiantian API."""
+        try:
+            url = f"{self.tiantian_base_url}/{fund_code}.js"
+            response = await self.client.get(url)
+            response.raise_for_status()
+
+            match = re.search(r'jsonpgz\((.*)\)', response.text)
+            if not match:
+                return None
+
+            data = json.loads(match.group(1))
+
+            name = data.get("name")
+            if not name:
+                return None
+
+            return {
+                "code": fund_code,
+                "name": name,
+                "type": "",
+                "company": "",
+            }
+        except Exception as e:
+            print(f"Error fetching fund info from Tiantian for {fund_code}: {e}")
             return None
 
     async def get_historical_nav(

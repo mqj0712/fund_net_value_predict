@@ -15,6 +15,7 @@ import {
   Col,
   Empty,
   Popconfirm,
+  Space,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { usePortfolioStore } from '../store/portfolioStore';
@@ -34,7 +35,9 @@ const PortfolioPage: React.FC = () => {
     deletePortfolio,
     addItem,
     deleteItem,
+    updateItem,
     fetchPerformance,
+    executeTransaction,
   } = usePortfolioStore();
 
   const { funds, fetchFunds } = useFundStore();
@@ -42,14 +45,26 @@ const PortfolioPage: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+  const [isEditItemModalOpen, setIsEditItemModalOpen] = useState(false);
+  const [isBuySellModalOpen, setIsBuySellModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [transactionFund, setTransactionFund] = useState<any>(null);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
   const [addItemForm] = Form.useForm();
+  const [editItemForm] = Form.useForm();
+  const [buySellForm] = Form.useForm();
 
   useEffect(() => {
     fetchPortfolios();
     fetchFunds();
   }, []);
+
+  useEffect(() => {
+    if (!selectedPortfolio && portfolios.length > 0) {
+      selectPortfolio(portfolios[0].id);
+    }
+  }, [portfolios]);
 
   useEffect(() => {
     if (selectedPortfolio) {
@@ -131,6 +146,61 @@ const PortfolioPage: React.FC = () => {
     }
   };
 
+  const handleEditItem = (item: any) => {
+    setEditingItem(item);
+    editItemForm.setFieldsValue({
+      shares: item.shares,
+      cost_basis: item.cost_basis,
+      purchase_date: dayjs(item.purchase_date),
+    });
+    setIsEditItemModalOpen(true);
+  };
+
+  const handleUpdateItem = async (values: any) => {
+    if (!selectedPortfolio || !editingItem) return;
+
+    try {
+      await updateItem(selectedPortfolio.id, editingItem.id, {
+        ...values,
+        purchase_date: values.purchase_date.format('YYYY-MM-DD'),
+      });
+      message.success('更新成功');
+      setIsEditItemModalOpen(false);
+      setEditingItem(null);
+      editItemForm.resetFields();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '更新失败');
+    }
+  };
+
+  const handleOpenBuySell = (item: any) => {
+    setTransactionFund(item.fund);
+    buySellForm.setFieldsValue({
+      fund_id: item.fund_id,
+      transaction_type: 'buy',
+      shares: 100,
+      price: item.cost_basis,
+    });
+    setIsBuySellModalOpen(true);
+  };
+
+  const handleBuySell = async (values: any) => {
+    if (!selectedPortfolio) return;
+
+    try {
+      await executeTransaction(selectedPortfolio.id, {
+        ...values,
+        transaction_date: dayjs().toISOString(),
+      });
+      message.success(`${values.transaction_type === 'buy' ? '买入' : '卖出'}成功`);
+      setIsBuySellModalOpen(false);
+      setTransactionFund(null);
+      buySellForm.resetFields();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '操作失败');
+    }
+  };
+
   const columns = [
     {
       title: '基金代码',
@@ -169,16 +239,33 @@ const PortfolioPage: React.FC = () => {
       title: '操作',
       key: 'action',
       render: (_: any, record: any) => (
-        <Popconfirm
-          title="确定删除这个持仓吗？"
-          onConfirm={() => handleDeleteItem(record.id)}
-          okText="确定"
-          cancelText="取消"
-        >
-          <Button type="link" danger icon={<DeleteOutlined />}>
-            删除
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEditItem(record)}
+          >
+            编辑
           </Button>
-        </Popconfirm>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => handleOpenBuySell(record)}
+          >
+            买入/卖出
+          </Button>
+          <Popconfirm
+            title="确定删除这个持仓吗？"
+            onConfirm={() => handleDeleteItem(record.id)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -326,7 +413,7 @@ const PortfolioPage: React.FC = () => {
 
         {/* Portfolio Details */}
         <Col xs={24} md={16}>
-          {selectedPortfolio ? (
+          {selectedPortfolio && (
             <>
               {/* Performance Summary */}
               {performance && (
@@ -410,10 +497,6 @@ const PortfolioPage: React.FC = () => {
                 </Card>
               )}
             </>
-          ) : (
-            <Card>
-              <Empty description="请选择一个组合" />
-            </Card>
           )}
         </Col>
       </Row>
@@ -554,6 +637,138 @@ const PortfolioPage: React.FC = () => {
           <Form.Item>
             <Button type="primary" htmlType="submit" block loading={loading}>
               更新
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Edit Item Modal */}
+      <Modal
+        title="编辑持仓"
+        open={isEditItemModalOpen}
+        onCancel={() => {
+          setIsEditItemModalOpen(false);
+          setEditingItem(null);
+          editItemForm.resetFields();
+        }}
+        footer={null}
+      >
+        <Form form={editItemForm} layout="vertical" onFinish={handleUpdateItem}>
+          <Form.Item
+            label="持有份额"
+            name="shares"
+            rules={[{ required: true, message: '请输入持有份额' }]}
+          >
+            <InputNumber
+              min={0}
+              step={0.01}
+              precision={2}
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="成本价"
+            name="cost_basis"
+            rules={[{ required: true, message: '请输入成本价' }]}
+          >
+            <InputNumber
+              min={0}
+              step={0.0001}
+              precision={4}
+              style={{ width: '100%' }}
+              addonBefore="¥"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="购买日期"
+            name="purchase_date"
+            rules={[{ required: true, message: '请选择购买日期' }]}
+          >
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>
+              保存
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Buy/Sell Modal */}
+      <Modal
+        title="买入/卖出"
+        open={isBuySellModalOpen}
+        onCancel={() => {
+          setIsBuySellModalOpen(false);
+          setTransactionFund(null);
+          buySellForm.resetFields();
+        }}
+        footer={null}
+      >
+        <Form form={buySellForm} layout="vertical" onFinish={handleBuySell}>
+          <Form.Item name="fund_id" hidden>
+            <Input />
+          </Form.Item>
+
+          {transactionFund && (
+            <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
+              <div><strong>{transactionFund.name}</strong></div>
+              <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
+                当前成本：¥{editingItem?.cost_basis?.toFixed(4) || '-'}
+              </div>
+            </div>
+          )}
+
+          <Form.Item
+            label="操作类型"
+            name="transaction_type"
+            rules={[{ required: true, message: '请选择操作类型' }]}
+          >
+            <Select>
+              <Select.Option value="buy">买入</Select.Option>
+              <Select.Option value="sell">卖出</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="份额"
+            name="shares"
+            rules={[{ required: true, message: '请输入份额' }]}
+          >
+            <InputNumber
+              min={0}
+              step={0.01}
+              precision={2}
+              style={{ width: '100%' }}
+              placeholder="例如：100"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="价格"
+            name="price"
+            rules={[{ required: true, message: '请输入价格' }]}
+          >
+            <InputNumber
+              min={0}
+              step={0.0001}
+              precision={4}
+              style={{ width: '100%' }}
+              addonBefore="¥"
+              placeholder="例如：1.2345"
+            />
+          </Form.Item>
+
+          <Form.Item label="备注" name="notes">
+            <Input.TextArea rows={2} placeholder="可选，添加备注" />
+          </Form.Item>
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>
+              确认
             </Button>
           </Form.Item>
         </Form>

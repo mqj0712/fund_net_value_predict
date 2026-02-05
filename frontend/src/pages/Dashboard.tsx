@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Row, Col, Button, Modal, Form, Input, message, Spin, Empty, Statistic } from 'antd';
-import { PlusOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, ReloadOutlined, EditOutlined } from '@ant-design/icons';
 import { useFundStore } from '../store/fundStore';
-import { fundsApi } from '../api/funds';
 import { createRealtimeNavWebSocket } from '../api/websocket';
 import type { RealtimeNav } from '../types';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { funds, loading, error, fetchFunds, addFund, deleteFund, updateRealtimeNav, realtimeNav } =
+  const { funds, loading, error, fetchFunds, addFund, deleteFund, updateFund, updateRealtimeNav, realtimeNav } =
     useFundStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingFund, setEditingFund] = useState<{ code: string; name: string; type: string; company: string } | null>(null);
   const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
 
   useEffect(() => {
     fetchFunds();
@@ -52,6 +54,29 @@ const Dashboard: React.FC = () => {
     } catch (error: any) {
       message.error(error.response?.data?.detail || 'Failed to add fund');
     }
+  };
+
+  const handleEditFund = async (values: any) => {
+    if (!editingFund) return;
+    try {
+      await updateFund(editingFund.code, values);
+      message.success('Fund updated successfully');
+      setIsEditModalOpen(false);
+      setEditingFund(null);
+      editForm.resetFields();
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to update fund');
+    }
+  };
+
+  const openEditModal = (fund: any) => {
+    setEditingFund(fund);
+    editForm.setFieldsValue({
+      name: fund.name,
+      type: fund.type,
+      company: fund.company,
+    });
+    setIsEditModalOpen(true);
   };
 
   const handleDeleteFund = async (code: string) => {
@@ -113,7 +138,23 @@ const Dashboard: React.FC = () => {
             return (
               <Col xs={24} sm={12} md={8} lg={6} key={fund.id}>
                 <Card
-                  title={fund.name}
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {fund.name}
+                      </span>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(fund);
+                        }}
+                        style={{ flexShrink: 0 }}
+                      />
+                    </div>
+                  }
                   extra={
                     <Button
                       type="text"
@@ -179,6 +220,37 @@ const Dashboard: React.FC = () => {
             <Input placeholder="e.g., 001186" />
           </Form.Item>
 
+          <Form.Item label="Fund Name" name="name">
+            <Input placeholder="Leave empty to auto-fetch" />
+          </Form.Item>
+
+          <Form.Item label="Type" name="type">
+            <Input placeholder="e.g., 股票型" />
+          </Form.Item>
+
+          <Form.Item label="Company" name="company">
+            <Input placeholder="e.g., 富国基金" />
+          </Form.Item>
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" block>
+              Add Fund
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Edit Fund"
+        open={isEditModalOpen}
+        onCancel={() => {
+          setIsEditModalOpen(false);
+          setEditingFund(null);
+          editForm.resetFields();
+        }}
+        footer={null}
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleEditFund}>
           <Form.Item
             label="Fund Name"
             name="name"
@@ -197,7 +269,7 @@ const Dashboard: React.FC = () => {
 
           <Form.Item>
             <Button type="primary" htmlType="submit" block>
-              Add Fund
+              Save Changes
             </Button>
           </Form.Item>
         </Form>

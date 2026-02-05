@@ -27,7 +27,7 @@ export const fundsApi = {
   // Create fund
   createFund: async (data: {
     code: string;
-    name: string;
+    name?: string;
     type?: string;
     company?: string;
   }): Promise<Fund> => {
@@ -38,6 +38,16 @@ export const fundsApi = {
   // Delete fund
   deleteFund: async (code: string): Promise<void> => {
     await apiClient.delete(`/api/v1/funds/${code}`);
+  },
+
+  // Update fund
+  updateFund: async (code: string, data: {
+    name?: string;
+    type?: string;
+    company?: string;
+  }): Promise<Fund> => {
+    const response = await apiClient.put(`/api/v1/funds/${code}`, data);
+    return response.data;
   },
 
   // Get NAV history

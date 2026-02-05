@@ -83,6 +83,26 @@ class PortfolioItem(Base):
     fund = relationship("Fund", back_populates="portfolio_items")
 
 
+class PortfolioTransaction(Base):
+    """Portfolio transaction model."""
+
+    __tablename__ = "portfolio_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False, index=True)
+    fund_id = Column(Integer, ForeignKey("funds.id"), nullable=False, index=True)
+    transaction_type = Column(String(20), nullable=False)  # buy, sell, adjust
+    shares = Column(Float, nullable=False)  # Positive for buy, negative for sell
+    price = Column(Float, nullable=False)  # Transaction price per share
+    transaction_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    notes = Column(String(500))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    portfolio = relationship("Portfolio")
+    fund = relationship("Fund")
+
+
 class Alert(Base):
     """Alert model."""
 
