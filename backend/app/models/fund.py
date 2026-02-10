@@ -1,6 +1,6 @@
 """Fund database model."""
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, Date
+from datetime import datetime, date
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, Date, Index
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
@@ -25,6 +25,7 @@ class Fund(Base):
     alerts = relationship("Alert", back_populates="fund", cascade="all, delete-orphan")
     holdings = relationship("FundHolding", back_populates="fund", cascade="all, delete-orphan")
     asset_allocations = relationship("FundAssetAllocation", back_populates="fund", cascade="all, delete-orphan")
+    kline_history = relationship("KlineHistory", back_populates="fund", cascade="all, delete-orphan")
 
 
 class NavHistory(Base):
@@ -154,3 +155,64 @@ class FundAssetAllocation(Base):
 
     # Relationships
     fund = relationship("Fund", back_populates="asset_allocations")
+
+
+class KlineHistory(Base):
+    """K-line history data model for technical analysis."""
+
+    __tablename__ = "kline_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    fund_id = Column(Integer, ForeignKey("funds.id"), nullable=False, index=True)
+
+    # Basic OHLCV data
+    trade_date = Column(DateTime, nullable=False, index=True)
+    open_price = Column(Float, nullable=False)
+    high_price = Column(Float, nullable=False)
+    low_price = Column(Float, nullable=False)
+    close_price = Column(Float, nullable=False)
+    volume = Column(Float, default=0)
+    amount = Column(Float, default=0)
+
+    # Moving Averages
+    ma5 = Column(Float)
+    ma10 = Column(Float)
+    ma20 = Column(Float)
+    ma60 = Column(Float)
+
+    # MACD
+    macd_dif = Column(Float)
+    macd_dea = Column(Float)
+    macd_hist = Column(Float)
+
+    # KDJ
+    kdj_k = Column(Float)
+    kdj_d = Column(Float)
+    kdj_j = Column(Float)
+
+    # RSI
+    rsi6 = Column(Float)
+    rsi12 = Column(Float)
+    rsi24 = Column(Float)
+
+    # Bollinger Bands
+    boll_upper = Column(Float)
+    boll_mid = Column(Float)
+    boll_lower = Column(Float)
+
+    # Period (daily/weekly/monthly/1min/5min/15min/30min/60min)
+    period = Column(String(10), nullable=False, index=True, default="daily")
+
+    change_pct = Column(Float)
+    turnover = Column(Float)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    fund = relationship("Fund")
+
+    # Composite indexes
+    __table_args__ = (
+        Index("idx_fund_date_period", "fund_id", "trade_date", "period"),
+    )

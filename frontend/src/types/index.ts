@@ -110,3 +110,85 @@ export interface PaginatedResponse<T> {
   page_size: number;
   total_pages: number;
 }
+
+// K-line data types
+export interface KlineData {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+  amount?: number;
+  change_pct?: number;
+  turnover?: number;
+  // Moving Averages
+  MA5?: number;
+  MA10?: number;
+  MA20?: number;
+  MA60?: number;
+  // MACD
+  MACD_DIF?: number;
+  MACD_DEA?: number;
+  MACD_HIST?: number;
+  // KDJ
+  KDJ_K?: number;
+  KDJ_D?: number;
+  KDJ_J?: number;
+  // RSI
+  RSI6?: number;
+  RSI12?: number;
+  RSI24?: number;
+  // Bollinger Bands
+  BOLL_UPPER?: number;
+  BOLL_MID?: number;
+  BOLL_LOWER?: number;
+}
+
+export interface KlineResponse {
+  fund_code: string;
+  fund_name: string;
+  period: string;
+  start_date: string;
+  end_date: string;
+  data_count: number;
+  indicators_enabled: boolean;
+  kline_data: KlineData[];
+}
+
+export interface KlineSummary {
+  fund_code: string;
+  fund_name: string;
+  period: string;
+  latest: {
+    date: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    change: number;
+    change_pct: number;
+  };
+  statistics: {
+    high_30: number;
+    low_30: number;
+    avg_30: number;
+    data_points: number;
+  };
+  indicators: {
+    MA5?: number;
+    MA20?: number;
+    MA60?: number;
+    MACD_DIF: number;
+    MACD_HIST: number;
+    KDJ_K: number;
+    RSI6?: number;
+  };
+  signals: {
+    trend: 'bullish' | 'bearish' | 'neutral';
+    macd: 'bullish' | 'bearish' | 'neutral';
+    rsi: 'overbought' | 'oversold' | 'neutral';
+  };
+}
+
+export type KlinePeriod = 'daily' | 'weekly' | 'monthly' | '1min' | '5min' | '15min' | '30min' | '60min';

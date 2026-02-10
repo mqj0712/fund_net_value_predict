@@ -7,6 +7,9 @@ from typing import Any
 
 import efinance as ef
 import pandas as pd
+import akshare as ak
+
+from app.core.technical_analysis import TechnicalAnalyzer
 
 
 class DataFetcher:
@@ -243,6 +246,128 @@ class DataFetcher:
         except Exception as e:
             print(f"Error fetching stock prices: {e}")
             return {}
+
+    async def get_etf_kline(
+        self,
+        fund_code: str,
+        period: str = "daily",
+        start_date: date | None = None,
+        end_date: date | None = None,
+        calculate_indicators: bool = True
+    ) -> list[dict[str, Any]]:
+        """Get ETF K-line data with technical indicators.
+
+        Args:
+            fund_code: ETF code such as "159246"
+            period: Time period - daily/weekly/monthly/1min/5min/15min/30min/60min
+            start_date: Start date filter
+            end_date: End date filter
+            calculate_indicators: Whether to calculate technical indicators
+
+        Returns:
+            List of K-line data dictionaries
+        """
+        try:
+            period_map = {
+                "daily": 101,
+                "weekly": 102,
+                "monthly": 103,
+            }
+
+            if period in ["1min", "5min", "15min", "30min", "60min"]:
+                # Use efinance for minute data
+                min_map = {
+                    "1min": 1,
+                    "5min": 5,
+                    "15min": 15,
+                    "30min": 30,
+                    "60min": 60
+                }
+                klt = min_map[period]
+                df = ef.stock.get_quote_history(fund_code, klt=klt)
+            else:
+                # Use efinance for daily/weekly/monthly
+                klt = period_map.get(period, 101)
+                df = ef.stock.get_quote_history(fund_code, klt=klt)
+
+            if df is None or df.empty:
+                return []
+
+            # Rename columns to standard names
+            column_mapping = {
+                "股票代码": "code",
+                "股票名称": "name",
+                "K线日期": "date",
+                "日期": "date",
+                "开盘": "open",
+                "收盘": "close",
+                "最高": "high",
+                "最低": "low",
+                "成交量": "volume",
+                "成交额": "amount",
+                "涨跌幅": "change_pct",
+                "涨跌额": "change_amt",
+                "换手率": "turnover",
+            }
+
+            df = df.rename(columns={k: v for k, v in column_mapping.items() if k in df.columns})
+
+            # Ensure required columns exist
+            required_cols = ["open", "close", "high", "low"]
+            for col in required_cols:
+                if col not in df.columns:
+                    print(f"Warning: Missing required column '{col}' in K-line data")
+                    return []
+
+            # Convert date column
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"])
+
+            # Filter by date range
+            if start_date:
+                df = df[df["date"] >= pd.Timestamp(start_date)]
+            if end_date:
+                df = df[df["date"] <= pd.Timestamp(end_date)]
+
+            # Calculate technical indicators if requested
+            if calculate_indicators:
+                df = TechnicalAnalyzer.calculate_all(df)
+
+            # Convert to list of dicts
+            records = []
+            for _, row in df.iterrows():
+                record = {
+                    "date": row["date"].isoformat() if pd.notna(row["date"]) else "",
+                    "open": float(row["open"]) if pd.notna(row["open"]) else 0.0,
+                    "close": float(row["close"]) if pd.notna(row["close"]) else 0.0,
+                    "high": float(row["high"]) if pd.notna(row["high"]) else 0.0,
+                    "low": float(row["low"]) if pd.notna(row["low"]) else 0.0,
+                }
+
+                if "volume" in row and pd.notna(row["volume"]):
+                    record["volume"] = float(row["volume"])
+                if "amount" in row and pd.notna(row["amount"]):
+                    record["amount"] = float(row["amount"])
+                if "change_pct" in row and pd.notna(row["change_pct"]):
+                    record["change_pct"] = float(row["change_pct"])
+
+                # Add technical indicators
+                indicator_cols = [col for col in row.index if col.startswith((
+                    "MA", "MACD", "KDJ", "RSI", "BOLL"
+                ))]
+                for col in indicator_cols:
+                    if pd.notna(row[col]):
+                        record[col] = float(row[col])
+
+                records.append(record)
+
+            return records
+
+        except Exception as e:
+            print(f"Error fetching K-line data for {fund_code}: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
 
 # Global data fetcher instance

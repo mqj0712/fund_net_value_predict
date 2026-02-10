@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db.session import init_db
-from app.api.v1.endpoints import funds, portfolio, alerts
+from app.api.v1.endpoints import funds, portfolio, alerts, kline
 from app.api.websocket import realtime_nav_handler, portfolio_handler, alerts_handler
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 
@@ -48,6 +48,7 @@ app.add_middleware(
 app.include_router(funds.router, prefix=f"{settings.api_v1_prefix}", tags=["funds"])
 app.include_router(portfolio.router, prefix=f"{settings.api_v1_prefix}", tags=["portfolio"])
 app.include_router(alerts.router, prefix=f"{settings.api_v1_prefix}", tags=["alerts"])
+app.include_router(kline.router, prefix="/api/v1/kline", tags=["kline"])
 
 
 # WebSocket endpoints

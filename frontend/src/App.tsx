@@ -1,12 +1,13 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { ConfigProvider, Layout, Menu } from 'antd';
-import { HomeOutlined, FundOutlined, BellOutlined } from '@ant-design/icons';
+import { HomeOutlined, FundOutlined, BellOutlined, LineChartOutlined } from '@ant-design/icons';
 import zhCN from 'antd/locale/zh_CN';
 import Dashboard from './pages/Dashboard';
 import FundDetailPage from './pages/FundDetailPage';
 import PortfolioPage from './pages/PortfolioPage';
 import AlertsPage from './pages/AlertsPage';
+import KlineAnalysis from './pages/KlineAnalysis';
 import './App.css';
 
 const { Header, Content } = Layout;
@@ -41,6 +42,11 @@ function App() {
                   icon: <BellOutlined />,
                   label: <Link to="/alerts">价格提醒</Link>,
                 },
+                {
+                  key: '4',
+                  icon: <LineChartOutlined />,
+                  label: <Link to="/kline">K线分析</Link>,
+                },
               ]}
             />
           </Header>
@@ -50,6 +56,7 @@ function App() {
               <Route path="/fund/:code" element={<FundDetailPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
+              <Route path="/kline" element={<KlineAnalysis />} />
             </Routes>
           </Content>
         </Layout>
