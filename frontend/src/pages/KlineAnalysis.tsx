@@ -34,6 +34,7 @@ const KlineAnalysis: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [fundsLoading, setFundsLoading] = useState(false);
   const [fundCode, setFundCode] = useState('159246');
+  const [inputFundCode, setInputFundCode] = useState('159246');
   const [period, setPeriod] = useState<KlinePeriod>('daily');
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [showIndicators, setShowIndicators] = useState(true);
@@ -60,6 +61,7 @@ const KlineAnalysis: React.FC = () => {
       // Set initial fund if list is loaded and no fund is selected
       if (fundCode === '159246' && response.items.length > 0 && !response.items.find(f => f.code === '159246')) {
         setFundCode(response.items[0].code);
+        setInputFundCode(response.items[0].code);
       }
     } catch (error) {
       console.error('Failed to load funds:', error);
@@ -96,9 +98,18 @@ const KlineAnalysis: React.FC = () => {
     }
   };
 
+  const handleQueryKline = async () => {
+    if (!inputFundCode.trim()) {
+      message.error('请输入基金代码');
+      return;
+    }
+    setFundCode(inputFundCode.trim());
+    await loadData();
+  };
+
   useEffect(() => {
     loadData();
-  }, [fundCode, period, dateRange, showIndicators]);
+  }, [period, dateRange, showIndicators]);
 
   const handleAddFund = async () => {
     if (!newFundCode.trim()) {
@@ -123,6 +134,7 @@ const KlineAnalysis: React.FC = () => {
       
       // Switch to new fund
       setFundCode(newFundCode.trim());
+      setInputFundCode(newFundCode.trim());
     } catch (error: any) {
       console.error('Failed to add fund:', error);
       message.error(error?.response?.data?.detail || '添加基金失败');
@@ -346,17 +358,23 @@ const KlineAnalysis: React.FC = () => {
             <Col xs={24} sm={12} md={10} lg={8}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Text strong>选择基金:</Text>
-                <AutoComplete
-                  value={fundCode}
-                  onChange={setFundCode}
-                  options={fundOptions}
-                  placeholder="输入基金代码或名称搜索"
-                  filterOption={(inputValue, option) =>
-                    option!.label.toUpperCase().includes(inputValue.toUpperCase())
+                <Space.Compact style={{ width: '100%' }}>
+                  <AutoComplete
+                    value={inputFundCode}
+                    onChange={setInputFundCode}
+                    options={fundOptions}
+                    placeholder="输入基金代码或名称搜索"
+                    filterOption={(inputValue, option) =>
+                      option!.label.toUpperCase().includes(inputValue.toUpperCase())
                   }
-                  style={{ width: '100%' }}
-                  loading={fundsLoading}
-                />
+                    style={{ flex: 1 }}
+                    loading={fundsLoading}
+                    onPressEnter={handleQueryKline}
+                  />
+                  <Button type="primary" onClick={handleQueryKline} loading={loading}>
+                    查询
+                  </Button>
+                </Space.Compact>
               </Space>
             </Col>
 
@@ -411,7 +429,10 @@ const KlineAnalysis: React.FC = () => {
                 <Tag
                   style={{ cursor: 'pointer', padding: '4px 12px' }}
                   color={fund.code === fundCode ? 'blue' : 'default'}
-                  onClick={() => setFundCode(fund.code)}
+                  onClick={() => {
+                    setInputFundCode(fund.code);
+                    setFundCode(fund.code);
+                  }}
                 >
                   {fund.code}
                 </Tag>

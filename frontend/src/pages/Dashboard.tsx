@@ -1,36 +1,80 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Row, Col, Button, Modal, Form, Input, message, Spin, Empty, Statistic } from 'antd';
-import { PlusOutlined, DeleteOutlined, ReloadOutlined, EditOutlined } from '@ant-design/icons';
-import { useFundStore } from '../store/fundStore';
+import { Card, Button, Modal, Form, Input, message, Spin, Empty } from 'antd';
+import { PlusOutlined, ReloadOutlined, EditOutlined } from '@ant-design/icons';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { useFundStore, getSortedFunds, getVisibleFunds } from '../store/fundStore';
 import { createRealtimeNavWebSocket } from '../api/websocket';
-import type { RealtimeNav } from '../types';
+import FundCard from '../components/dashboard/FundCard';
+import type { Fund } from '../types';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { funds, loading, error, fetchFunds, addFund, deleteFund, updateFund, updateRealtimeNav, realtimeNav } =
-    useFundStore();
+  const {
+    funds,
+    preferences,
+    loading,
+    error,
+    fetchFunds,
+    fetchPreferences,
+    addFund,
+    deleteFund,
+    updateFund,
+    updateRealtimeNav,
+    updatePreference,
+    updateSortOrder,
+    realtimeNav,
+  } = useFundStore();
+
+  const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingFund, setEditingFund] = useState<{ code: string; name: string; type: string; company: string } | null>(null);
+  const [editingFund, setEditingFund] = useState<Fund | null>(null);
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
 
-  useEffect(() => {
-    fetchFunds();
-  }, []);
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
-  // Setup WebSocket connections for all funds
   useEffect(() => {
-    const wsClients: any[] = [];
+    const init = async () => {
+      await fetchFunds();
+      await fetchPreferences();
+    };
+    init();
+     
+  }, [fetchFunds, fetchPreferences]);
 
-    funds.forEach((fund) => {
+  // Setup WebSocket connections for visible funds only
+  useEffect(() => {
+    const wsClients: { disconnect: () => void }[] = [];
+    const displayFunds = isEditMode ? getSortedFunds(useFundStore.getState()) : getVisibleFunds(useFundStore.getState());
+
+    displayFunds.forEach((fund) => {
       const ws = createRealtimeNavWebSocket(fund.code);
       ws.connect()
         .then(() => {
           ws.onMessage((msg) => {
             if (msg.type === 'nav_update') {
-              updateRealtimeNav(fund.code, msg.data as RealtimeNav);
+              updateRealtimeNav(fund.code, msg.data);
             }
           });
           wsClients.push(ws);
@@ -43,20 +87,21 @@ const Dashboard: React.FC = () => {
     return () => {
       wsClients.forEach((ws) => ws.disconnect());
     };
-  }, [funds]);
+  }, [funds, preferences, isEditMode, updateRealtimeNav]);
 
-  const handleAddFund = async (values: any) => {
+  const handleAddFund = async (values: { code: string; name?: string; type?: string; company?: string }) => {
     try {
       await addFund(values);
       message.success('Fund added successfully');
       setIsModalOpen(false);
       form.resetFields();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to add fund');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: string } } };
+      message.error(err.response?.data?.detail || 'Failed to add fund');
     }
   };
 
-  const handleEditFund = async (values: any) => {
+  const handleEditFund = async (values: { name: string; type?: string; company?: string }) => {
     if (!editingFund) return;
     try {
       await updateFund(editingFund.code, values);
@@ -64,12 +109,13 @@ const Dashboard: React.FC = () => {
       setIsEditModalOpen(false);
       setEditingFund(null);
       editForm.resetFields();
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to update fund');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: string } } };
+      message.error(err.response?.data?.detail || 'Failed to update fund');
     }
   };
 
-  const openEditModal = (fund: any) => {
+  const openEditModal = (fund: Fund) => {
     setEditingFund(fund);
     editForm.setFieldsValue({
       name: fund.name,
@@ -87,7 +133,7 @@ const Dashboard: React.FC = () => {
         try {
           await deleteFund(code);
           message.success('Fund deleted successfully');
-        } catch (error: any) {
+        } catch {
           message.error('Failed to delete fund');
         }
       },
@@ -98,6 +144,35 @@ const Dashboard: React.FC = () => {
     fetchFunds();
     message.info('Refreshing fund data...');
   };
+
+  const handleToggleVisible = async (fund: Fund, isVisible: boolean) => {
+    try {
+      await updatePreference(fund.id, isVisible);
+      message.success(isVisible ? 'Fund added to dashboard' : 'Fund hidden from dashboard');
+    } catch (error: unknown) {
+      message.error('Failed to update preference');
+    }
+  };
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const displayFunds = getSortedFunds(useFundStore.getState());
+      const oldIndex = displayFunds.findIndex((f) => f.id === active.id);
+      const newIndex = displayFunds.findIndex((f) => f.id === over.id);
+
+      const newOrder = arrayMove(displayFunds, oldIndex, newIndex);
+      const updates = newOrder.map((fund, index) => ({
+        fundId: fund.id,
+        sortOrder: index,
+      }));
+
+      await updateSortOrder(updates);
+    }
+  }, [updateSortOrder]);
+
+  const displayFunds = isEditMode ? getSortedFunds(useFundStore.getState()) : getVisibleFunds(useFundStore.getState());
 
   if (loading && funds.length === 0) {
     return (
@@ -115,6 +190,14 @@ const Dashboard: React.FC = () => {
           <Button icon={<ReloadOutlined />} onClick={handleRefresh} style={{ marginRight: '8px' }}>
             Refresh
           </Button>
+          <Button
+            icon={isEditMode ? <EditOutlined /> : <EditOutlined />}
+            onClick={() => setIsEditMode(!isEditMode)}
+            style={{ marginRight: '8px' }}
+            type={isEditMode ? 'default' : 'default'}
+          >
+            {isEditMode ? 'Done' : 'Edit'}
+          </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>
             Add Fund
           </Button>
@@ -127,79 +210,47 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {funds.length === 0 ? (
-        <Empty description="No funds tracked yet. Add a fund to get started." />
+      {displayFunds.length === 0 && !isEditMode ? (
+        <Card
+          style={{ textAlign: 'center', padding: '48px' }}
+          title="No funds displayed"
+        >
+          <p style={{ marginBottom: '24px', fontSize: '16px' }}>
+            You haven't selected any funds to display on your dashboard.
+          </p>
+          <Button type="primary" icon={<EditOutlined />} onClick={() => setIsEditMode(true)}>
+            Edit and select funds to display
+          </Button>
+        </Card>
+      ) : displayFunds.length === 0 && isEditMode ? (
+        <Empty description="No funds added yet. Add a fund to get started." />
       ) : (
-        <Row gutter={[16, 16]}>
-          {funds.map((fund) => {
-            const nav = realtimeNav[fund.code];
-            const changeColor = nav?.change_percent > 0 ? '#cf1322' : nav?.change_percent < 0 ? '#3f8600' : '#000';
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={displayFunds.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', margin: '-8px' }}>
+              {displayFunds.map((fund) => {
+                const nav = realtimeNav[fund.code];
+                const prefMap = new Map(preferences.map((p) => [p.fund_id, p]));
+                const pref = prefMap.get(fund.id);
+                const isVisible = pref?.is_visible ?? true;
 
-            return (
-              <Col xs={24} sm={12} md={8} lg={6} key={fund.id}>
-                <Card
-                  title={
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {fund.name}
-                      </span>
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(fund);
-                        }}
-                        style={{ flexShrink: 0 }}
-                      />
-                    </div>
-                  }
-                  extra={
-                    <Button
-                      type="text"
-                      danger
-                      size="small"
-                      icon={<DeleteOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteFund(fund.code);
-                      }}
-                    />
-                  }
-                  hoverable
-                  onClick={() => navigate(`/fund/${fund.code}`)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <div style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '12px', color: '#8c8c8c' }}>Code: {fund.code}</div>
-                    {fund.type && <div style={{ fontSize: '12px', color: '#8c8c8c' }}>Type: {fund.type}</div>}
-                  </div>
-
-                  {nav ? (
-                    <>
-                      <Statistic
-                        title="Estimated NAV"
-                        value={nav.estimated_nav}
-                        precision={4}
-                        valueStyle={{ fontSize: '24px' }}
-                      />
-                      <div style={{ marginTop: '8px', fontSize: '16px', fontWeight: 'bold', color: changeColor }}>
-                        {nav.change_percent > 0 ? '+' : ''}
-                        {nav.change_percent.toFixed(2)}%
-                      </div>
-                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#8c8c8c' }}>
-                        {nav.is_trading_hours ? 'Trading' : 'Closed'}
-                      </div>
-                    </>
-                  ) : (
-                    <Spin />
-                  )}
-                </Card>
-              </Col>
-            );
-          })}
-        </Row>
+                return (
+                  <FundCard
+                    key={fund.id}
+                    fund={fund}
+                    nav={nav}
+                    isEditMode={isEditMode}
+                    isVisible={isVisible}
+                    onToggleVisible={(v) => handleToggleVisible(fund, v)}
+                    onEdit={openEditModal}
+                    onDelete={handleDeleteFund}
+                    onClick={() => navigate(`/fund/${fund.code}`)}
+                  />
+                );
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       <Modal

@@ -4,6 +4,56 @@ This document provides guidelines for AI agents working on this full-stack fund 
 
 ---
 
+## Application Management Rules
+
+**IMPORTANT:** All application starts and restarts MUST use the `./run.sh` script. Direct start commands are prohibited:
+- Frontend: Do NOT use `npm run dev`, `npm run build`, `npm run preview`
+- Backend: Do NOT use `pixi run uvicorn`
+- Use `./run.sh start`, `./run.sh restart`, `./run.sh stop`, `./run.sh status`
+- For individual service control, use `./run.sh start-backend`, `./run.sh start-frontend` options, as well as stop
+
+---
+
+## Environment Management Rules
+
+**IMPORTANT:** Do NOT modify environment dependencies directly. All dependency changes must be proposed as commands for user approval:
+
+### When to Propose Dependency Changes:
+- Adding new packages (e.g., `akshare`)
+- Upgrading existing packages
+- Removing unused packages
+- Changing package versions
+
+### How to Propose:
+1. Identify the required change
+2. Provide the exact command for the user to execute
+3. Explain the reason for the change
+4. Wait for user approval before proceeding
+
+### Example Commands (for user to execute):
+```bash
+# Add new Python package
+pixi add pypi-package-name
+
+# Add Python package from PyPI
+pixi run pip install package-name
+
+# Update package
+pixi update package-name
+
+# Update all dependencies
+pixi update --all
+```
+
+### Prohibited Actions:
+- ❌ Do NOT directly edit `pixi.toml` dependency sections
+- ❌ Do NOT run `pixi install` without user approval
+- ❌ Do NOT run `pixi add` commands directly
+- ❌ Do NOT modify `package.json` or `pixi.lock` files
+- ❌ Do NOT clear cache directories without user approval
+
+---
+
 ## Commands
 
 ### Frontend (TypeScript + React)
@@ -106,9 +156,14 @@ export const useFundStore = create<FundState>((set) => ({...}));
 
 ## Testing Guidelines
 
+**IMPORTANT:** All test scripts MUST be placed in the corresponding test directories:
+- Backend: `backend/tests/*.py` (e.g., `backend/tests/test_funds.py`)
+- Frontend: `frontend/tests/*.ts` (e.g., `frontend/tests/funds.test.ts`)
+- Root directory and project root are NOT valid locations for test files
+
 **Backend (pytest):** Tests in `backend/tests/test_*.py`, use `async def test_...()`, `unittest.mock` for APIs, fixtures for DB
 
-**Frontend (vitest):** Tests in `*.test.ts` or `src/tests/`, use `describe`/`test`, `vi.fn()` for mocks
+**Frontend (vitest):** Tests in `frontend/tests/*.test.ts`, use `describe`/`test`, `vi.fn()` for mocks
 
 ---
 

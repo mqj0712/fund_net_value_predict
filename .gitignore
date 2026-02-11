@@ -10,6 +10,8 @@
 *.pid
 *.pid.*
 
-# debug/test scripts
+# debug scripts
 backend/debug_*.py
-backend/test_*.py
+
+# test scripts (organized in tests/)
+backend/tests/

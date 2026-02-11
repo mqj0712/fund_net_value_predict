@@ -3,9 +3,10 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
-from app.models.fund import Fund as FundModel, NavHistory as NavHistoryModel, FundHolding as FundHoldingModel
+from app.models.fund import Fund as FundModel, NavHistory as NavHistoryModel, FundHolding as FundHoldingModel, UserFundPreference as UserFundPreferenceModel
 from app.schemas.fund import (
     Fund,
     FundCreate,
@@ -15,6 +16,9 @@ from app.schemas.fund import (
     PaginatedResponse,
     FundHoldingSchema,
     FundAssetAllocationSchema,
+    UserFundPreference,
+    UserFundPreferenceCreate,
+    UserFundPreferenceUpdate,
 )
 from app.core.data_fetcher import data_fetcher
 from app.core.nav_estimator import nav_estimator
@@ -68,16 +72,124 @@ async def search_funds(
     return [Fund.model_validate(fund) for fund in funds]
 
 
-@router.get("/funds/{code}", response_model=Fund)
-async def get_fund(code: str, db: AsyncSession = Depends(get_db)):
-    """Get fund details by code."""
-    query = select(FundModel).where(FundModel.code == code)
+# User Fund Preference Endpoints - must be defined before /funds/{code} to avoid route conflicts
+@router.get("/funds/preferences", response_model=list[UserFundPreference])
+async def get_user_fund_preferences(
+    user_id: str = Query(..., description="User identifier"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all fund preferences for a user."""
+    query = select(UserFundPreferenceModel).options(selectinload(UserFundPreferenceModel.fund))
+    query = query.where(UserFundPreferenceModel.user_id == user_id)
+    query = query.order_by(UserFundPreferenceModel.sort_order.asc(), UserFundPreferenceModel.created_at.desc())
     result = await db.execute(query)
-    fund = result.scalar_one_or_none()
+    preferences = result.scalars().all()
+
+    return [UserFundPreference.model_validate(pref) for pref in preferences]
+
+
+@router.post("/funds/preferences", response_model=UserFundPreference, status_code=201)
+async def set_fund_preference(
+    preference_data: UserFundPreferenceCreate,
+    user_id: str = Query(..., description="User identifier"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or update a fund preference for a user."""
+    # Check if fund exists
+    fund_query = select(FundModel).where(FundModel.id == preference_data.fund_id)
+    fund_result = await db.execute(fund_query)
+    fund = fund_result.scalar_one_or_none()
 
     if not fund:
         raise HTTPException(status_code=404, detail="Fund not found")
 
+    # Check if preference already exists
+    query = select(UserFundPreferenceModel).where(
+        UserFundPreferenceModel.user_id == user_id,
+        UserFundPreferenceModel.fund_id == preference_data.fund_id
+    )
+    result = await db.execute(query)
+    existing_pref = result.scalar_one_or_none()
+
+    if existing_pref:
+        # Update existing preference
+        if preference_data.is_visible is not None:
+            existing_pref.is_visible = preference_data.is_visible
+        if preference_data.sort_order is not None:
+            existing_pref.sort_order = preference_data.sort_order
+        await db.commit()
+        await db.refresh(existing_pref)
+        return UserFundPreference.model_validate(existing_pref)
+    else:
+        # Create new preference
+        preference = UserFundPreferenceModel(
+            user_id=user_id,
+            **preference_data.model_dump()
+        )
+        db.add(preference)
+        await db.commit()
+        await db.refresh(preference)
+        return UserFundPreference.model_validate(preference)
+
+
+@router.put("/funds/preferences/batch", status_code=204)
+async def batch_update_fund_preferences(
+    updates: list[dict],
+    user_id: str = Query(..., description="User identifier"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Batch update fund preference sort orders."""
+    for update in updates:
+        fund_id = update.get("fund_id")
+        sort_order = update.get("sort_order")
+
+        if fund_id is None or sort_order is None:
+            continue
+
+        query = select(UserFundPreferenceModel).where(
+            UserFundPreferenceModel.user_id == user_id,
+            UserFundPreferenceModel.fund_id == fund_id
+        )
+        result = await db.execute(query)
+        pref = result.scalar_one_or_none()
+
+        if pref:
+            pref.sort_order = sort_order
+
+    await db.commit()
+    return None
+
+
+@router.delete("/funds/preferences/{fund_id}", status_code=204)
+async def delete_fund_preference(
+    fund_id: int,
+    user_id: str = Query(..., description="User identifier"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a fund preference for a user."""
+    query = select(UserFundPreferenceModel).where(
+        UserFundPreferenceModel.user_id == user_id,
+        UserFundPreferenceModel.fund_id == fund_id
+    )
+    result = await db.execute(query)
+    preference = result.scalar_one_or_none()
+
+    if not preference:
+        raise HTTPException(status_code=404, detail="Preference not found")
+
+    await db.delete(preference)
+    await db.commit()
+
+    return None
+
+
+@router.get("/funds/{code}", response_model=Fund)
+async def get_fund(code: str, db: AsyncSession = Depends(get_db)):
+    query = select(FundModel).where(FundModel.code == code)
+    result = await db.execute(query)
+    fund = result.scalar_one_or_none()
+    if not fund:
+        raise HTTPException(status_code=404, detail="Fund not found")
     return Fund.model_validate(fund)
 
 

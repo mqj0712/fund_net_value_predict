@@ -260,3 +260,37 @@ class PaginatedResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+# User Fund Preference Schemas
+class UserFundPreferenceBase(BaseModel):
+    """Base user fund preference schema."""
+
+    fund_id: int
+    is_visible: bool = True
+    sort_order: int | None = None
+
+
+class UserFundPreferenceCreate(UserFundPreferenceBase):
+    """User fund preference creation schema."""
+
+    pass
+
+
+class UserFundPreferenceUpdate(BaseModel):
+    """User fund preference update schema."""
+
+    is_visible: bool | None = None
+    sort_order: int | None = None
+
+
+class UserFundPreference(UserFundPreferenceBase):
+    """User fund preference response schema."""
+
+    id: int
+    user_id: str
+    created_at: datetime
+    updated_at: datetime
+    fund: Fund | None = None
+
+    model_config = {"from_attributes": True}

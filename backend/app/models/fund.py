@@ -1,6 +1,6 @@
 """Fund database model."""
 from datetime import datetime, date
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, Date, Index
+from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Boolean, Date, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
@@ -215,4 +215,26 @@ class KlineHistory(Base):
     # Composite indexes
     __table_args__ = (
         Index("idx_fund_date_period", "fund_id", "trade_date", "period"),
+    )
+
+
+class UserFundPreference(Base):
+    """User fund preference model for dashboard display settings."""
+
+    __tablename__ = "user_fund_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(100), nullable=False, index=True)
+    fund_id = Column(Integer, ForeignKey("funds.id"), nullable=False)
+    is_visible = Column(Boolean, default=True)
+    sort_order = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    fund = relationship("Fund")
+
+    # Unique constraint to prevent duplicate preferences for same user and fund
+    __table_args__ = (
+        UniqueConstraint('user_id', 'fund_id', name='uix_user_fund'),
     )

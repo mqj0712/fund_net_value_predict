@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { Fund, NavHistory, RealtimeNav, PaginatedResponse } from '../types';
+import type { Fund, NavHistory, RealtimeNav, PaginatedResponse, UserFundPreference } from '../types';
 
 export const fundsApi = {
   // List all funds
@@ -66,5 +66,47 @@ export const fundsApi = {
   getRealtimeNav: async (code: string): Promise<RealtimeNav> => {
     const response = await apiClient.get(`/api/v1/funds/${code}/nav/realtime`);
     return response.data;
+  },
+
+  // Fund Preferences
+  getUserFundPreferences: async (userId: string): Promise<UserFundPreference[]> => {
+    const response = await apiClient.get('/api/v1/funds/preferences', {
+      params: { user_id: userId },
+    });
+    return response.data;
+  },
+
+  setFundPreference: async (
+    fundId: number,
+    isVisible: boolean,
+    sortOrder: number | null = null,
+    userId: string,
+  ): Promise<UserFundPreference> => {
+    const response = await apiClient.post('/api/v1/funds/preferences', {
+      fund_id: fundId,
+      is_visible: isVisible,
+      sort_order: sortOrder,
+    }, {
+      params: { user_id: userId },
+    });
+    return response.data;
+  },
+
+  batchUpdatePreferences: async (
+    updates: Array<{ fundId: number; sortOrder: number }>,
+    userId: string,
+  ): Promise<void> => {
+    await apiClient.put('/api/v1/funds/preferences/batch',
+      updates.map((u) => ({ fund_id: u.fundId, sort_order: u.sortOrder })),
+      {
+        params: { user_id: userId },
+      },
+    );
+  },
+
+  deleteFundPreference: async (fundId: number, userId: string): Promise<void> => {
+    await apiClient.delete(`/api/v1/funds/preferences/${fundId}`, {
+      params: { user_id: userId },
+    });
   },
 };

@@ -8,6 +8,8 @@ BACKEND_DIR="backend"
 FRONTEND_DIR="frontend"
 BACKEND_PID_FILE=".backend.pid"
 FRONTEND_PID_FILE=".frontend.pid"
+unset https_proxy
+unset http_proxy
 
 # Colors for output
 RED='\033[0;31m'
@@ -251,17 +253,25 @@ show_usage() {
     echo "Usage: $0 {start|stop|restart|status}"
     echo
     echo "Commands:"
-    echo "  start   - Start backend and frontend services (default)"
-    echo "  stop    - Stop all services"
-    echo "  restart - Restart all services"
-    echo "  status  - Show service status"
+    echo "  start       - Start backend and frontend services (default)"
+    echo "  start-backend  - Start backend service only"
+    echo "  start-frontend - Start frontend service only"
+    echo "  stop        - Stop all services"
+    echo "  stop-backend   - Stop backend service only"
+    echo "  stop-frontend  - Stop frontend service only"
+    echo "  restart     - Restart all services"
+    echo "  status      - Show service status"
     echo
     echo "Examples:"
-    echo "  $0           # Start services (default)"
-    echo "  $0 start     # Start services"
-    echo "  $0 stop      # Stop services"
-    echo "  $0 restart   # Restart services"
-    echo "  $0 status    # Show status"
+    echo "  $0              # Start all services (default)"
+    echo "  $0 start        # Start all services"
+    echo "  $0 start-backend  # Start backend only"
+    echo "  $0 start-frontend # Start frontend only"
+    echo "  $0 stop         # Stop all services"
+    echo "  $0 stop-backend   # Stop backend only"
+    echo "  $0 stop-frontend  # Stop frontend only"
+    echo "  $0 restart      # Restart all services"
+    echo "  $0 status       # Show status"
 }
 
 # Main script logic
@@ -269,8 +279,22 @@ case "${1:-start}" in
     start)
         start
         ;;
+    start-backend)
+        mkdir -p logs
+        start_backend
+        ;;
+    start-frontend)
+        mkdir -p logs
+        start_frontend
+        ;;
     stop)
         stop
+        ;;
+    stop-backend)
+        stop_backend
+        ;;
+    stop-frontend)
+        stop_frontend
         ;;
     restart)
         restart

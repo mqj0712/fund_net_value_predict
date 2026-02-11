@@ -192,3 +192,25 @@ export interface KlineSummary {
 }
 
 export type KlinePeriod = 'daily' | 'weekly' | 'monthly' | '1min' | '5min' | '15min' | '30min' | '60min';
+
+// Index types
+export interface IndexData {
+  code: string;
+  name: string;
+  current: number;
+  change: number;
+  change_percent: number;
+  last_update: string;
+}
+
+// User Fund Preference types
+export interface UserFundPreference {
+  id: number;
+  user_id: string;
+  fund_id: number;
+  fund?: Fund;
+  is_visible: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
